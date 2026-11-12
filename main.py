@@ -341,40 +341,6 @@ class JapanLiveCamPlugin(Star):
             logger.warning(f"[JapanLiveCam] Failed to snap live stream frame: {exc}")
             return None
 
-    async def _get_fallback_image_url(self, cam: dict[str, Any]) -> str | None:
-        """Resolve highest resolution available fallback cover URL.
-
-        Args:
-            cam: Camera dictionary.
-
-        Returns:
-            URL string of fallback image.
-        """
-        video_id = self._extract_video_id(cam)
-        if not video_id:
-            return cam.get("thumbnail")
-
-        maxres_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
-
-        def check_maxres_sync() -> bool:
-            try:
-                request = urllib.request.Request(
-                    maxres_url,
-                    method="HEAD",
-                    headers={"User-Agent": DEFAULT_USER_AGENT},
-                )
-                with urllib.request.urlopen(request, timeout=3) as resp:
-                    return bool(resp.status == 200)
-            except (urllib.error.URLError, TimeoutError, OSError):
-                return False
-
-        loop = asyncio.get_running_loop()
-        has_maxres = await loop.run_in_executor(None, check_maxres_sync)
-        if has_maxres:
-            return maxres_url
-
-        return cam.get("thumbnail") or f"https://i.ytimg.com/vi/{video_id}/hq720.jpg"
-
     @filter.llm_tool(name="get_japan_livecam")
     async def get_japan_livecam(self, event: AstrMessageEvent, location: str) -> str:
         """Get real-time live camera street view from Japan (Tokyo, Haneda Airport, etc.).
@@ -405,19 +371,21 @@ class JapanLiveCamPlugin(Star):
         if video_id:
             live_image_path = await self._capture_live_frame(video_id)
 
-        msg_chain = [
-            Plain(f"📷【{name_zh}】当前实时现场画面：\n"),
-        ]
         if live_image_path and live_image_path.exists():
-            msg_chain.append(Image.fromFileSystem(str(live_image_path)))
-        else:
-            fallback_url = await self._get_fallback_image_url(cam)
-            if fallback_url:
-                msg_chain.append(Image.fromURL(fallback_url))
+            msg_chain = [
+                Plain(f"📷【{name_zh}】当前实时现场画面（非封面）：\n"),
+                Image.fromFileSystem(str(live_image_path)),
+                Plain(f"\n🌐 3D 视角查看：{mt3d_url}"),
+            ]
+            await event.send(event.chain_result(msg_chain))
+            return f"已成功向用户展示【{name_zh}】的真实当前现场画面。"
 
-        msg_chain.append(Plain(f"\n🌐 3D 视角查看：{mt3d_url}"))
-        await event.send(event.chain_result(msg_chain))
-        return f"已成功向用户展示【{name_zh}】的实时现场画面。"
+        err_msg = (
+            f"⚠️ 未能成功捕获【{name_zh}】的当前实时视频画面。\n"
+            "【严格实况原则】已禁用任何静态封面替代。请确保已在插件目录配置有效的 cookies.txt 且直播流在线。"
+        )
+        await event.send(event.plain_result(err_msg))
+        return f"获取【{name_zh}】实时视频画面失败，已按规则拒绝发送静态封面。"
 
     @filter.command("livecam")
     async def livecam_cmd(self, event: AstrMessageEvent, location: str = ""):
@@ -457,15 +425,16 @@ class JapanLiveCamPlugin(Star):
         if video_id:
             live_image_path = await self._capture_live_frame(video_id)
 
-        msg_chain = [
-            Plain(f"📷【{name_zh}】当前实时现场画面：\n"),
-        ]
         if live_image_path and live_image_path.exists():
-            msg_chain.append(Image.fromFileSystem(str(live_image_path)))
+            msg_chain = [
+                Plain(f"📷【{name_zh}】当前实时现场画面（非封面）：\n"),
+                Image.fromFileSystem(str(live_image_path)),
+                Plain(f"\n🌐 3D 视角查看：{mt3d_url}"),
+            ]
+            yield event.chain_result(msg_chain)
         else:
-            fallback_url = await self._get_fallback_image_url(cam)
-            if fallback_url:
-                msg_chain.append(Image.fromURL(fallback_url))
-
-        msg_chain.append(Plain(f"\n🌐 3D 视角查看：{mt3d_url}"))
-        yield event.chain_result(msg_chain)
+            err_msg = (
+                f"⚠️ 未能成功捕获【{name_zh}】的当前实时视频画面。\n"
+                "【严格实况原则】已禁用任何静态封面替代。请确保已在插件目录配置有效的 cookies.txt 且直播流在线。"
+            )
+            yield event.plain_result(err_msg)
