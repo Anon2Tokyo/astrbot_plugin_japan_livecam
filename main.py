@@ -103,11 +103,24 @@ class JapanLiveCamPlugin(Star):
             return self._cameras_cache
 
         def fetch_sync() -> list[dict[str, Any]]:
-            request = urllib.request.Request(
-                LIVECAM_API_URL, headers={"User-Agent": DEFAULT_USER_AGENT}
-            )
-            with urllib.request.urlopen(request, timeout=10) as response:
-                return json.loads(response.read().decode("utf-8"))
+            last_err = None
+            for attempt in range(3):
+                try:
+                    request = urllib.request.Request(
+                        LIVECAM_API_URL, headers={"User-Agent": DEFAULT_USER_AGENT}
+                    )
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        return json.loads(response.read().decode("utf-8"))
+                except (
+                    urllib.error.URLError,
+                    TimeoutError,
+                    OSError,
+                    json.JSONDecodeError,
+                ) as exc:
+                    last_err = exc
+                    if attempt < 2:
+                        time.sleep(1)
+            raise last_err or RuntimeError("Failed to fetch camera list after retries")
 
         try:
             loop = asyncio.get_running_loop()
