@@ -9,7 +9,7 @@ from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import Image
 from astrbot.api.star import Context, Star
 
 try:
@@ -333,32 +333,71 @@ class JapanLiveCamPlugin(Star):
                 url = f"https://www.youtube.com/watch?v={video_id}"
                 await page.goto(url, wait_until="domcontentloaded")
 
-                # Handle pre-roll ads if any
-                for _ in range(15):
-                    is_ad = await page.evaluate(
-                        "() => document.querySelector('#movie_player.ad-showing') !== null"
-                    )
-                    if not is_ad:
-                        paused = await page.evaluate(
-                            "() => document.querySelector('video')?.paused"
-                        )
-                        if paused is False:
-                            break
-
-                    await page.evaluate("""
+                # Handle pre-roll ads actively and fast-forward them
+                for _ in range(20):
+                    status = await page.evaluate("""
                         () => {
-                            const btn = document.querySelector(
-                                '#movie_player .ytp-skip-ad-button, ' +
-                                '#movie_player .ytp-ad-skip-button, ' +
-                                '#movie_player .ytp-ad-skip-button-modern, ' +
-                                '#movie_player .ytp-ad-skip-button-modern--clean'
-                            );
-                            if (btn) btn.click();
+                            const player = document.querySelector('#movie_player');
+                            if (!player) return { player: false, isAd: false, paused: true };
+
+                            const isAd = player.classList.contains('ad-showing') ||
+                                         player.classList.contains('ad-interrupting') ||
+                                         document.querySelector('.ytp-ad-player-overlay') !== null ||
+                                         (document.querySelector('.video-ads.ytp-ad-module')?.childElementCount > 0);
+
+                            const video = player.querySelector('video');
+                            if (isAd && video) {
+                                video.muted = true;
+                                if (isFinite(video.duration) && video.duration > 0) {
+                                    video.currentTime = video.duration;
+                                }
+                                video.playbackRate = 16.0;
+
+                                const skipBtn = document.querySelector(
+                                    '.ytp-skip-ad-button, .ytp-ad-skip-button, ' +
+                                    '.ytp-ad-skip-button-modern, .ytp-ad-skip-button-slot button, ' +
+                                    '.ytp-ad-skip-button-container button'
+                                );
+                                if (skipBtn) skipBtn.click();
+                            }
+
+                            return {
+                                player: true,
+                                isAd: isAd,
+                                paused: video ? video.paused : true,
+                            };
                         }
                     """)
+
+                    if (
+                        status.get("player")
+                        and not status.get("isAd")
+                        and status.get("paused") is False
+                    ):
+                        break
+
                     await asyncio.sleep(1)
 
-                await asyncio.sleep(3)
+                # Strict Ad Guard: Verify that no ad is currently displayed
+                is_still_ad = await page.evaluate("""
+                    () => {
+                        const player = document.querySelector('#movie_player');
+                        if (!player) return true;
+                        return player.classList.contains('ad-showing') ||
+                               player.classList.contains('ad-interrupting') ||
+                               document.querySelector('.ytp-ad-player-overlay') !== null ||
+                               (document.querySelector('.video-ads.ytp-ad-module')?.childElementCount > 0);
+                    }
+                """)
+                if is_still_ad:
+                    logger.warning(
+                        f"[JapanLiveCam] Video {video_id} is still displaying an ad. Aborting capture to prevent ad delivery."
+                    )
+                    await browser.close()
+                    return None
+
+                # Stabilize live video rendering
+                await asyncio.sleep(2)
                 await page.evaluate("""
                     const player = document.querySelector('#movie_player');
                     if (player) {
@@ -407,7 +446,6 @@ class JapanLiveCamPlugin(Star):
             or cam.get("id")
         )
         video_id = self._extract_video_id(cam)
-        mt3d_url = f"https://minitokyo3d.com/?selection={cam.get('id')}"
 
         live_image_path = None
         if video_id:
@@ -415,9 +453,7 @@ class JapanLiveCamPlugin(Star):
 
         if live_image_path and live_image_path.exists():
             msg_chain = [
-                Plain(f"📷【{name_zh}】当前实时现场画面（非封面）：\n"),
                 Image.fromFileSystem(str(live_image_path)),
-                Plain(f"\n🌐 3D 视角查看：{mt3d_url}"),
             ]
             await event.send(event.chain_result(msg_chain))
             return f"已成功向用户展示【{name_zh}】的真实当前现场画面。"
@@ -461,7 +497,6 @@ class JapanLiveCamPlugin(Star):
             or cam.get("id")
         )
         video_id = self._extract_video_id(cam)
-        mt3d_url = f"https://minitokyo3d.com/?selection={cam.get('id')}"
 
         live_image_path = None
         if video_id:
@@ -469,9 +504,7 @@ class JapanLiveCamPlugin(Star):
 
         if live_image_path and live_image_path.exists():
             msg_chain = [
-                Plain(f"📷【{name_zh}】当前实时现场画面（非封面）：\n"),
                 Image.fromFileSystem(str(live_image_path)),
-                Plain(f"\n🌐 3D 视角查看：{mt3d_url}"),
             ]
             yield event.chain_result(msg_chain)
         else:
