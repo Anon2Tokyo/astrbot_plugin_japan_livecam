@@ -370,7 +370,7 @@ class JapanLiveCamPlugin(Star):
         """Get real-time live camera street view from Japan (Tokyo, Haneda Airport, etc.).
 
         Args:
-            location: The name of the city, airport or landmark (e.g. 羽田机场, 涩谷, 富士山).
+            location (str): The name of the city, airport or landmark (e.g. 羽田机场, 涩谷, 富士山).
 
         Returns:
             Execution summary text for the LLM.
