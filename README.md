@@ -40,21 +40,29 @@ playwright install chromium
 playwright install-deps chromium
 ```
 
-### 3. 配置认证凭证（cookies.txt）
+### 3. 配置认证凭证（支持机器绑定加密，安全零明文）
 
-为了让云服务器顺利穿透 YouTube 直播流的机器人验证：
+为了让云服务器顺利穿透 YouTube 直播流的机器人验证，建议配置 Cookie（从浏览器 F12 网络请求标头中复制即可）：
 
-1. 在电脑浏览器登录 YouTube，按 **F12** 进入网络（Network）选项卡，刷新页面。
-2. 找到第一个 `www.youtube.com` 请求，在请求标头（Request Headers）中找到 `Cookie:` 并右键复制其值。
-3. 在云服务器插件目录下创建 `cookies.txt` 并粘贴保存：
-   ```bash
-   cd AstrBot/data/plugins/astrbot_plugin_japan_livecam
-   nano cookies.txt
-   # (粘贴复制的内容，Ctrl+O 保存，Ctrl+X 退出)
-   chmod 600 cookies.txt
-   ```
+#### 推荐方式 A：机器绑定加密（Machine-Bound Encryption，零密码维护，离机即废）
 
-*(也可以直接将该 Cookie 文本设为环境变量 `YOUTUBE_COOKIES`)*
+插件内置了基于本机硬件指纹（Linux `/etc/machine-id`、Windows `MachineGuid` 等）的对称加密工具：
+
+```bash
+cd AstrBot/data/plugins/astrbot_plugin_japan_livecam
+python encrypt_tool.py
+```
+
+* 按照提示粘贴你的 Cookie，工具会自动结合本机的唯一硬件 ID 将其加密为 `cookies.enc`，并提示删除明文文件。
+* **防护效果**：插件启动时会自动利用当前机器硬件无感解密；离开这台机器，任何人都无法解密，彻底免去泄露风险！
+
+#### 方式 B：环境变量注入（适合 Docker / K8s）
+```bash
+export YOUTUBE_COOKIES="你的Cookie内容"
+```
+
+#### 方式 C：常规文件
+在插件目录下新建 `cookies.txt`，粘贴 Cookie 即可（`.gitignore` 默认忽略防止误提交）。
 
 ---
 

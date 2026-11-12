@@ -8,3 +8,6 @@ venv/
 .idea/
 .vscode/
 cookies.txt
+cookies.enc
+*.enc
+temp/

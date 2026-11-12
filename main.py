@@ -12,6 +12,8 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
 from astrbot.api.star import Context, Star
 
+from crypto_utils import decrypt_machine_bound
+
 LIVECAM_API_URL = "https://mini-tokyo.appspot.com/livecam"
 CACHE_TTL_SECONDS = 300
 DEFAULT_USER_AGENT = (
@@ -192,21 +194,43 @@ class JapanLiveCamPlugin(Star):
         return ""
 
     def _load_cookies_list(self) -> list[dict[str, Any]]:
-        """Parse cookies.txt (Netscape format or raw key=value string).
+        """Parse cookies from machine-bound cookies.enc, environment variable, or cookies.txt.
 
         Returns:
             List of cookie dicts formatted for Playwright context.
         """
-        cookie_file = self._plugin_dir / "cookies.txt"
         cookie_content = ""
-        if cookie_file.exists():
-            try:
-                cookie_content = cookie_file.read_text(encoding="utf-8").strip()
-            except OSError as exc:
-                logger.warning(f"[JapanLiveCam] Failed to read cookies.txt: {exc}")
 
+        # Priority 1: Machine-bound encrypted cookies.enc
+        enc_file = self._plugin_dir / "cookies.enc"
+        if enc_file.exists():
+            try:
+                enc_bytes = enc_file.read_bytes()
+                decrypted = decrypt_machine_bound(enc_bytes)
+                if decrypted:
+                    cookie_content = decrypted.strip()
+                    logger.info(
+                        "[JapanLiveCam] Successfully decrypted machine-bound cookies.enc."
+                    )
+                else:
+                    logger.error(
+                        "[JapanLiveCam] Failed to decrypt cookies.enc! Machine fingerprint mismatch."
+                    )
+            except OSError as exc:
+                logger.warning(f"[JapanLiveCam] Error reading cookies.enc: {exc}")
+
+        # Priority 2: Environment variable YOUTUBE_COOKIES
         if not cookie_content and "YOUTUBE_COOKIES" in os.environ:
             cookie_content = os.environ["YOUTUBE_COOKIES"].strip()
+
+        # Priority 3: Plaintext cookies.txt fallback
+        if not cookie_content:
+            cookie_file = self._plugin_dir / "cookies.txt"
+            if cookie_file.exists():
+                try:
+                    cookie_content = cookie_file.read_text(encoding="utf-8").strip()
+                except OSError as exc:
+                    logger.warning(f"[JapanLiveCam] Failed to read cookies.txt: {exc}")
 
         if not cookie_content:
             return []
