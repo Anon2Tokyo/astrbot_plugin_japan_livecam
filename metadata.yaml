@@ -1,0 +1,10 @@
+name: astrbot_plugin_japan_livecam
+display_name: 日本实况街景
+desc: 通过 Mini Tokyo 3D 与实时摄像源，获取日本东京、羽田机场、成田机场、涩谷、新宿、富士山等地的实时高清监控与街景画面。
+version: v1.0.0
+author: soyorin
+astrbot_version: ">=0.0.1"
+repo: https://github.com/Anon2Tokyo/astrbot_plugin_japan_livecam
+support_platforms:
+  - aiocqhttp
+  - qq
