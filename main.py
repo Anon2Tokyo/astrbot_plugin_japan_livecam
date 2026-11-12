@@ -12,7 +12,10 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
 from astrbot.api.star import Context, Star
 
-from crypto_utils import decrypt_machine_bound
+try:
+    from .crypto_utils import decrypt_machine_bound
+except ImportError:
+    from crypto_utils import decrypt_machine_bound
 
 LIVECAM_API_URL = "https://mini-tokyo.appspot.com/livecam"
 CACHE_TTL_SECONDS = 300
