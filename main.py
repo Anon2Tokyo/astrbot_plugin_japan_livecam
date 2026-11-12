@@ -341,16 +341,18 @@ class JapanLiveCamPlugin(Star):
                         )
                         if paused is False:
                             break
-                    skip_btn = page.locator(
-                        ".ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, button:has-text('跳过')"
-                    )
-                    if await skip_btn.count() > 0 and await skip_btn.first.is_visible():
-                        try:
-                            await skip_btn.first.click()
-                        except (TimeoutError, OSError):
-                            logger.debug(
-                                "[JapanLiveCam] Skip button click timed out or failed."
-                            )
+
+                    await page.evaluate("""
+                        () => {
+                            const btn = document.querySelector(
+                                '#movie_player .ytp-skip-ad-button, ' +
+                                '#movie_player .ytp-ad-skip-button, ' +
+                                '#movie_player .ytp-ad-skip-button-modern, ' +
+                                '#movie_player .ytp-ad-skip-button-modern--clean'
+                            );
+                            if (btn) btn.click();
+                        }
+                    """)
                     await asyncio.sleep(1)
 
                 await asyncio.sleep(3)
